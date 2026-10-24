@@ -7,6 +7,7 @@ use App\Models\Attorney;
 use App\Models\PracticeArea;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 /**
  * Handles consultation request form submissions — distinct from
@@ -59,9 +60,46 @@ class ConsultationController extends Controller
             'attorney_id' => $recommendations->first()?->id,
         ]);
 
+$notificationEmail = config('safalaw.notification_email');
+$emailSent = false;
+
+if ($notificationEmail) {
+    try {
+        $body =
+            "A new consultation request was submitted on the SafaLaw website.\n\n"
+            . "Name: {$data['full_name']}\n"
+            . "Email: {$data['email']}\n"
+            . "Phone: {$data['phone']}\n"
+            . "Client type: {$data['client_type']}\n"
+            . "Location: {$data['client_location']}\n"
+            . "Practice area ID: {$data['practice_area_id']}\n"
+            . "Preferred date: {$data['preferred_date']}\n"
+            . "Preferred time: {$data['preferred_time']}\n\n"
+            . "Legal profile:\n{$data['legal_profile']}\n\n"
+            . "Client requirements:\n{$data['client_requirements']}\n\n"
+            . "Message:\n{$data['message']}\n\n"
+            . "Note: This is a consultation request, not a confirmed appointment.\n";
+
+        Mail::raw($body, function ($mail) use ($notificationEmail, $data) {
+            $mail->to($notificationEmail)
+                ->subject('New SafaLaw Consultation Request')
+                ->replyTo($data['email'], $data['full_name']);
+        });
+
+        $emailSent = true;
+    } catch (\Throwable $exception) {
+        report($exception);
+    }
+}
+
         return redirect()
-            ->route('consultation')
-            ->with('status', 'Your sample intake was saved. The suggested attorneys are for demonstration only; no referral or appointment has been sent.')
+    ->route('consultation')
+    ->with(
+        'status',
+        $emailSent
+            ? 'Your consultation request was saved and the email notification was submitted successfully. The appointment is not confirmed until the firm responds.'
+            : 'Your consultation request was saved, but the email notification could not be sent. Please contact SAFALAW directly.'
+    )
             ->with('recommended_attorney_ids', $recommendations->pluck('id')->all());
     }
 

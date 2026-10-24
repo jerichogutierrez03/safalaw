@@ -6,6 +6,7 @@ use App\Models\Inquiry;
 use App\Models\PracticeArea;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 /**
  * Handles general questions only — "I have a quick question" territory.
@@ -41,8 +42,37 @@ class ContactController extends Controller
             'type' => Inquiry::TYPE_GENERAL,
         ]);
 
-        return redirect()
-            ->route('contact')
-            ->with('status', 'Your message was saved by this project. The form is not yet connected to the firm’s email, so for a direct response please call or email SAFALAW below.');
+$notificationEmail = config('safalaw.notification_email');
+$emailSent = false;
+
+if ($notificationEmail) {
+    try {
+        Mail::raw(
+            "A new general inquiry was submitted on the SafaLaw website.\n\n"
+            . "Name: {$fullName}\n"
+            . "Email: {$data['email']}\n\n"
+            . "Message:\n{$data['message']}\n",
+            function ($mail) use ($notificationEmail, $data, $fullName) {
+                $mail->to($notificationEmail)
+                    ->subject('New SafaLaw Contact Message')
+                    ->replyTo($data['email'], $fullName);
+            }
+        );
+
+        $emailSent = true;
+    } catch (\Throwable $exception) {
+        report($exception);
     }
+}
+
+        return redirect()
+    ->route('contact')
+    ->with(
+        'status',
+        $emailSent
+            ? 'Your message was saved and the email notification was submitted successfully.'
+            : 'Your message was saved, but the email notification could not be sent. Please contact SAFALAW directly.'
+    );
+    }
+
 }
